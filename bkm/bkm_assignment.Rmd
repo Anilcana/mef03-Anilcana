@@ -1,0 +1,110 @@
+---
+title: "BKM Assignment"
+author: "Anılcan Atik"
+date: "15 November 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+## **Library**
+```{r library, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(dplyr)
+library(rvest)
+library(tidyverse)
+library(data.table)
+library(tidyr)
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(png)
+```
+# **Data Collection**
+## **Creating url_list**
+```{r url_list, echo=TRUE, message=FALSE, warning=FALSE}
+url_list<-c()
+
+for (m in c(1:12)) {
+  for (y in c(2010:2018)){
+    url=paste0(paste0(paste0("https://bkm.com.tr/secilen-aya-ait-sektorel-gelisim/?filter_year=",y),"&filter_month=",m),"&List=Listele")
+    url_list=append(url_list, url)
+  }
+}
+```
+
+## **creating date_list**
+```{r date_list, message=FALSE, warning=FALSE}
+date_list<-c()
+for (m in c(1:12)) {
+  for (y in c(2010:2018)){
+    date_list=append(date_list,paste0(1,"/",m,"/",y))}}
+#date_list as date
+date_list_f<-as.Date(date_list,"%d/%m/%Y")
+```
+## **rvest**
+```{r df, message=FALSE, warning=FALSE}
+df=data.frame()
+for (i in c(1:108)){
+  raw<-read_html(url_list[i])
+  table<-raw%>%html_nodes("table")%>%
+    .[(4)] %>% 
+    html_table(table, fill = TRUE, header = FALSE)%>%
+    as.data.frame()%>%
+    slice(-(1:3))%>%
+    mutate(Tarih=date_list[i])
+  df=bind_rows(df,table)
+}
+```
+# **Data Cleaning**
+## **Replace NAs as 0s, as.numeric, comma, dot problems**
+```{r edit,message=FALSE, warning=FALSE}
+colnames(df)<-c("Isyeri_Grubu","KK_Islem_Adedi","BK_Islem_Adedi","KK_Islem_Tutari","BK_Islem_Tutari","Tarih")
+dfa<-df
+dfa <- df %>% mutate_all(list(~replace_na(.,0)))
+dfa<-dfa%>%mutate_at(c("KK_Islem_Adedi","BK_Islem_Adedi"),function(x) as.numeric(as.character(gsub('\\.','', x))))
+dfa<-dfa%>%mutate_at(c("KK_Islem_Tutari","BK_Islem_Tutari"),function(x) (gsub('\\.','', x)))
+dfa<-dfa%>%mutate_at(c("KK_Islem_Tutari","BK_Islem_Tutari"),function(x) (gsub('\\,','.', x)))
+dfa<-dfa%>%mutate_at(c("KK_Islem_Adedi","BK_Islem_Adedi","KK_Islem_Tutari","BK_Islem_Tutari"),function(x) as.numeric(x))
+dfa$Tarih<-as.Date(dfa$Tarih,"%d/%m/%Y")
+dfa<-dfa%>%filter(Isyeri_Grubu !="TOPLAM")
+```
+# **Data Analysis**
+
+## **Sectoral Distribution of Expenses (df_p)**
+```{r df_p, echo=TRUE,message=FALSE, warning=FALSE}
+df_p<-dfa%>%group_by(Tarih)%>%mutate(Toplam_Islem_Tutari_Tarih=(sum(KK_Islem_Tutari)+sum(BK_Islem_Tutari)))%>%ungroup()%>%mutate(Islem_Tutari=KK_Islem_Tutari+BK_Islem_Tutari)%>%mutate(Islem_Yuzdesi=Islem_Tutari/Toplam_Islem_Tutari_Tarih)%>%group_by(Tarih)%>%
+  arrange(desc(Islem_Yuzdesi))%>%top_n(7)%>%mutate(ordering = 8-(rank(Islem_Yuzdesi,ties.method="max") * 1.0))%>%ungroup()
+df_pa<-ggplot(df_p, aes(x=ordering,y=Islem_Yuzdesi,colour = Isyeri_Grubu,fill=Isyeri_Grubu))+geom_tile(aes(y= Islem_Yuzdesi/2, height=Islem_Yuzdesi,width=0.9)) +coord_cartesian(clip = "on", expand = FALSE) +labs(title='{closest_state}', x = "") +theme(plot.title = element_text(hjust = 1, size = 22),axis.ticks.x = element_blank(),axis.text.x  = element_blank()) +transition_states(Tarih,transition_length = 2, state_length = 1) +ease_aes('cubic-in-out')
+animate(df_pa, nframes = 400, fps = 20, width = 600, height = 500)
+```
+
+## **KK_Islem_Tutarı and BK_Islem_Tutarı Change (df_b)**
+```{r df_b, echo=TRUE,message=FALSE, warning=FALSE}
+#KK_Islem_Tutarı and BK_Islem_Tutarı Change(df_b)
+df_b<-dfa%>%group_by(Tarih)%>%mutate(KK_Islem_Total=sum(KK_Islem_Tutari))%>%mutate(BK_Islem_Total=sum(BK_Islem_Tutari))%>%mutate(Total=KK_Islem_Total+BK_Islem_Total)%>%select(Total,Tarih,BK_Islem_Total,KK_Islem_Total)%>%ungroup()%>%gather(key,value,Total,BK_Islem_Total,KK_Islem_Total)
+df_ba<-ggplot(df_b,aes(x=Tarih))+geom_line(aes(y=value,color=key))+geom_line(aes(y=value,color=key))+geom_line(aes(y=value,color=key))
+df_ba
+```
+
+
+
+## **Unit Expense Plot(df_c)**
+```{r df_c, echo=TRUE,message=FALSE, warning=FALSE}
+#Unit Expense Plot(df_c)
+df_c<-dfa%>%group_by(Tarih)%>%mutate(KK_Birim_Tutar=(sum(KK_Islem_Tutari)/sum(KK_Islem_Adedi)))%>%mutate(BK_Birim_Tutar=(sum(BK_Islem_Tutari)/sum(BK_Islem_Adedi)))%>%mutate(Total_Birim_Harcama=KK_Birim_Tutar+BK_Birim_Tutar)%>%gather(key,value,Total_Birim_Harcama,BK_Birim_Tutar,KK_Birim_Tutar)
+df_ca<-ggplot(df_c,aes(x=Tarih))+geom_line(aes(y=value,color=key))+geom_line(aes(y=value,color=key))+geom_line(aes(y=value,color=key))
+df_ca
+```
+
+
+
+
+
+
+
+
+
