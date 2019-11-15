@@ -2,11 +2,11 @@
 
 
 
-### Week 0
+### Week 1
 
-Learned How to Create a Progress Journal in Github
+[Introduction Assignment](https://github.com/pjournal/mef03-Anilcana/blob/master/assignment1anilcanatik.html)
 
 
 
-## Week 1
-
+## Week 9
+[BKM Assignment](https://github.com/pjournal/mef03-Anilcana/blob/master/bkm/bkm_anilcanatik.html)
