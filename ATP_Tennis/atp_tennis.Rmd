@@ -1,0 +1,89 @@
+---
+title: "ATP Tennis Analysis"
+output: html_document
+author: Anılcan Atik
+date: "December 1st, 2019"
+
+    
+---
+
+## Library 
+
+```{r message=FALSE, warning=FALSE}
+
+
+library("tidyverse")
+library("ggplot2")
+library("viridis")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Analysis 1:
+
+Ranking countries (flag codes) by the single champions:
+
+
+
+```{r Analysis 1}
+load("C:/Users/silaa/OneDrive/Masaüstü/tennis/Rexercise.RData")
+q1<-left_join(tourney_df,player_df,by=c("singles_winner_player_id"="player_id"))
+champ_flags_df<-q1%>%select(singles_winner_player_id,flag_code)%>%count(flag_code,sort=T)
+champ_flags_df
+```
+
+## Analysis 2:
+
+Rank countries which did not get any singles championships by the games won when they win the match:
+
+```{r Analysis 2}
+nonchamp_players<- player_df %>%select(player_id, flag_code) %>%anti_join(., champ_flags_df,by="flag_code")
+nonchamp_players %>% left_join(.,score_df, by= c("player_id"="winner_player_id")) %>%group_by(flag_code) %>%summarise(total_won= sum(winner_games_won, na.rm=TRUE)) %>%arrange(desc(total_won))
+```
+
+## Analysis 3:
+
+Match Duration Analysis by countries:
+
+```{r Analysis 3}
+#Average Winner Match Durations by Countries
+#Stage1(matchduration,match_id matching)
+stga1<-stats_df%>%select(match_id,match_duration)
+stga1a<-left_join(score_df,stga1,by="match_id")%>%select(match_duration,winner_player_id,loser_player_id)
+#Stage2(winner_id,loser_id,country matching)
+stga2<-inner_join(player_df,stga1a,by=c("player_id"="winner_player_id"))%>%mutate(win_duration=match_duration)
+stga2a<-inner_join(player_df,stga1a,by=c("player_id"="loser_player_id"))%>%mutate(lose_duration=match_duration)
+stga2b<-full_join(stga2,stga2a,by = c("player_id", "player_slug", "first_name", "last_name", "flag_code", "residence", "birth_place", "birth_date", "turned_pro", "weight_kg", "height_cm", "handedness", "backhand", "match_duration"))%>%select(flag_code,win_duration,lose_duration,match_duration)
+stga2c<-stga2b%>%group_by(flag_code)%>%mutate(duration=mean(match_duration,na.rm=T),win_duration=mean(win_duration,na.rm=T),lose_duration=mean(lose_duration,na.rm=T))
+stgmain<-stga2c[!duplicated(stga2c$flag_code), ]
+stgap2<-stgmain%>%arrange(desc(win_duration))%>%head(12)
+```
+
+## Plot 1:
+
+Average duration of won games grouped by countries:
+
+```{r Plot 1}
+plot1<-ggplot(stgap2,aes(x=reorder(flag_code,-win_duration),y=win_duration,fill = flag_code))+geom_bar(stat="identity")+labs(title ="Average Winning Match Durations by Countries",x="Country Name",y="Average Winning Match Duration" )
+plot1
+```
+
+## Plot 2:
+
+Average duration of games in general,won games and lost games grouped by countries:
+
+```{r Plot 2}
+stgap3<-stgap2%>%gather(key,value,duration,win_duration,lose_duration)
+plot3<-ggplot(stgap3,aes(x=flag_code,y=c(duration,win_duration,lose_duration),fill = flag_code))+geom_bar(stat="identity")+labs(title ="Average Losing Match Durations by Countries",x="Country Name",y="Average Losing Match Duration" )
+plot3<-ggplot(stgap3, aes(fill=key, y=value, x=key)) + 
+  geom_bar(position="dodge", stat="identity") +
+  scale_fill_viridis(discrete = T, option = "E") +
+  ggtitle("Countries' Game Durations") +
+  facet_wrap(~flag_code) +
+  theme(legend.position="none") +
+  theme(axis.text.x = element_text(angle = 25))+
+  xlab("")
+plot3
+```
